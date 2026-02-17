@@ -1,0 +1,6 @@
+PyQt6
+pygments
+rapidfuzz
+python-docx
+openpyxl
+Pygments
