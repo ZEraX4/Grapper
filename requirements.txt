@@ -4,3 +4,4 @@ rapidfuzz
 python-docx
 openpyxl
 Pygments
+pypdf

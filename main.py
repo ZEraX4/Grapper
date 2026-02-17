@@ -185,7 +185,7 @@ class SearchWorker(QThread):
     progress_update = pyqtSignal(object)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, search_engine, directory, query, stop_event, threshold=60, use_regex=False, search_office=False):
+    def __init__(self, search_engine, directory, query, stop_event, threshold=60, use_regex=False, search_office=False, case_sensitive=False, limit_per_file=0):
         super().__init__()
         self.search_engine = search_engine
         self.directory = directory
@@ -194,6 +194,8 @@ class SearchWorker(QThread):
         self.threshold = threshold
         self.use_regex = use_regex
         self.search_office = search_office
+        self.case_sensitive = case_sensitive
+        self.limit_per_file = limit_per_file
 
     def run(self):
         try:
@@ -207,7 +209,9 @@ class SearchWorker(QThread):
                 threshold=self.threshold,
                 update_callback=self.progress_update.emit,
                 use_regex=self.use_regex,
-                search_office=self.search_office
+                search_office=self.search_office,
+                case_sensitive=self.case_sensitive,
+                limit_per_file=self.limit_per_file
             )
 
             for res in results:
@@ -412,10 +416,20 @@ class MainWindow(QMainWindow):
         self.spin_threshold.setValue(60)
         match_params_layout.addWidget(lbl_threshold)
         match_params_layout.addWidget(self.spin_threshold)
+
+        lbl_limit = QLabel("Max/File:")
+        lbl_limit.setToolTip("0 = Unlimited")
+        self.spin_limit_per_file = QSpinBox()
+        self.spin_limit_per_file.setRange(0, 1000)
+        self.spin_limit_per_file.setValue(0)
+        match_params_layout.addWidget(lbl_limit)
+        match_params_layout.addWidget(self.spin_limit_per_file)
         self.chk_office = QCheckBox("Office")
         self.chk_regex = QCheckBox("Regex")
+        self.chk_case = QCheckBox("Case")
         match_params_layout.addWidget(self.chk_office)
         match_params_layout.addWidget(self.chk_regex)
+        match_params_layout.addWidget(self.chk_case)
         
         btn_regex_help = QPushButton()
         btn_regex_help.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
@@ -665,7 +679,9 @@ class MainWindow(QMainWindow):
         threshold = self.spin_threshold.value()
         use_regex = self.chk_regex.isChecked()
         search_office = self.chk_office.isChecked()
-        self.worker = SearchWorker(self.search_engine, directory, query, self.stop_event, threshold, use_regex, search_office)
+        case_sensitive = self.chk_case.isChecked()
+        limit_per_file = self.spin_limit_per_file.value()
+        self.worker = SearchWorker(self.search_engine, directory, query, self.stop_event, threshold, use_regex, search_office, case_sensitive, limit_per_file)
         self.worker.result_found.connect(self.add_result)
         self.worker.progress_update.connect(self.update_status)
         self.worker.error_occurred.connect(self.show_error)
@@ -752,6 +768,9 @@ class MainWindow(QMainWindow):
             elif filepath.lower().endswith('.xlsx'):
                 lines = self.search_engine._extract_text_from_xlsx(filepath)
                 content = "\n".join(lines)
+            elif filepath.lower().endswith('.pdf'):
+                lines = self.search_engine._extract_text_from_pdf(filepath)
+                content = "\n".join(lines)
             else:
                 with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
@@ -831,6 +850,17 @@ class MainWindow(QMainWindow):
         block = self.text_editor.document().findBlockByNumber(line_index)
         if block.isValid():
             cursor = QTextCursor(block)
+            
+            # If we have precise span information (from regex), select the match exactly
+            if len(match) > 3 and isinstance(match[3], tuple):
+                start, end = match[3]
+                cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, start)
+                cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.KeepAnchor, end - start)
+            else:
+                # Fallback for fuzzy matches: highlight the whole line if no span is provided
+                # Future improvement: try to find the best match within the line
+                pass
+            
             self.text_editor.setTextCursor(cursor)
             self.text_editor.centerCursor()
         
@@ -903,6 +933,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("threshold", self.spin_threshold.value())
         self.settings.setValue("regex", self.chk_regex.isChecked())
         self.settings.setValue("office", self.chk_office.isChecked())
+        self.settings.setValue("case_sensitive", self.chk_case.isChecked())
+        self.settings.setValue("limit_per_file", self.spin_limit_per_file.value())
         self.settings.setValue("app_theme", self.combo_app_theme.currentText())
         self.settings.setValue("syntax_theme", self.combo_syntax_theme.currentText())
         self.settings.setValue("editor_path", self.editor_path)
@@ -929,6 +961,12 @@ class MainWindow(QMainWindow):
 
         office = self.settings.value("office", False, type=bool)
         self.chk_office.setChecked(office)
+
+        case_sensitive = self.settings.value("case_sensitive", False, type=bool)
+        self.chk_case.setChecked(case_sensitive)
+
+        limit_per_file = self.settings.value("limit_per_file", 0, type=int)
+        self.spin_limit_per_file.setValue(limit_per_file)
 
         app_theme = self.settings.value("app_theme", "Dark")
         self.combo_app_theme.setCurrentText(app_theme)

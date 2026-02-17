@@ -8,7 +8,7 @@ Grapper is a modern AI Slop (Antigravity), PyQt6-based fuzzy search GUI applicat
 
 - **Fuzzy Search**: Quickly find files based on partial or approximate matches.
 - **Regex Support**: Use regular expressions for complex search queries.
-- **Office Document Search**: Integration with `python-docx` and `openpyxl` to search within `.docx` and `.xlsx` files.
+- **Office Document and PDF Search**: Integration with `python-docx`, `openpyxl`, and `pypdf` to search within `.docx`, `.xlsx`, and `.pdf` files.
 - **Syntax Highlighting**: Built-in support for multiple syntax highlighting themes using `pygments`.
 - **External Editor Integration**: Open search results directly in your favorite text editor.
 - **Dark/Light Themes**: Toggle between dark and light modes for optimal viewing.
@@ -23,6 +23,7 @@ Grapper is a modern AI Slop (Antigravity), PyQt6-based fuzzy search GUI applicat
 - rapidfuzz
 - python-docx
 - openpyxl
+- pypdf
 
 ## Installation
 

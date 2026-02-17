@@ -50,7 +50,23 @@ class SearchEngine:
             print(f"Error extracting Excel text: {e}")
             return []
 
-    def search(self, directory, query, stop_event=None, threshold=60, update_callback=None, use_regex=False, search_office=False):
+    def _extract_text_from_pdf(self, filepath):
+        """Extracts text from a .pdf file."""
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(filepath)
+            lines = []
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    # Split into lines and filter out empty ones
+                    lines.extend([line for line in text.splitlines() if line.strip()])
+            return lines
+        except Exception as e:
+            print(f"Error extracting PDF text: {e}")
+            return []
+
+    def search(self, directory, query, stop_event=None, threshold=60, update_callback=None, use_regex=False, search_office=False, case_sensitive=False, limit_per_file=0):
         """
         Walks the directory and searches for the query in text files.
         Yields results as they are found.
@@ -92,11 +108,15 @@ class SearchEngine:
                 lines = []
 
                 if search_office:
-                    if file.lower().endswith('.docx'):
+                    lower_file = file.lower()
+                    if lower_file.endswith('.docx'):
                         lines = self._extract_text_from_docx(filepath)
                         is_office = True
-                    elif file.lower().endswith('.xlsx'):
+                    elif lower_file.endswith('.xlsx'):
                         lines = self._extract_text_from_xlsx(filepath)
+                        is_office = True
+                    elif lower_file.endswith('.pdf'):
+                        lines = self._extract_text_from_pdf(filepath)
                         is_office = True
 
                 if not is_office:
@@ -114,21 +134,30 @@ class SearchEngine:
                     matches = []
                     if use_regex:
                         try:
-                            pattern = re.compile(query, re.IGNORECASE)
+                            flags = 0 if case_sensitive else re.IGNORECASE
+                            pattern = re.compile(query, flags)
                             for i, line in enumerate(lines):
-                                if pattern.search(line):
-                                    # Format: (line_content, score, line_index)
-                                    # Score 100 for regex match
-                                    matches.append((line.strip(), 100, i))
+                                for match in pattern.finditer(line):
+                                    matches.append((line.strip(), 100, i, match.span()))
+                                    if limit_per_file > 0 and len(matches) >= limit_per_file:
+                                        break
+                                if limit_per_file > 0 and len(matches) >= limit_per_file:
+                                    break
                         except re.error:
-                            pass # Invalid regex, ignore or maybe return error?
+                            pass # Invalid regex
                     else:
+                        processor = None if case_sensitive else lambda x: x.lower()
+                        
+                        # Set limit based on limit_per_file. If 0, use None (rapidfuzz default is 10)
+                        fuzzy_limit = limit_per_file if limit_per_file > 0 else None
+                        
                         matches = process.extract(
                             query, 
                             lines, 
                             scorer=fuzz.partial_ratio, 
-                            limit=10,
-                            score_cutoff=threshold
+                            limit=fuzzy_limit,
+                            score_cutoff=threshold,
+                            processor=processor
                         )
                     
                     if matches:
