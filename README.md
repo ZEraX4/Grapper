@@ -1,6 +1,6 @@
 # Grapper
 
-Grapper is a modern, PyQt6-based fuzzy search GUI application designed for searching text across files and Office documents (Word and Excel). It features a powerful search engine with regex support, syntax highlighting, and a sleek user interface.
+Grapper is a modern AI Slop (Antigravity), PyQt6-based fuzzy search GUI application designed for searching text across files and Office documents (Word and Excel). It features a powerful search engine with regex support, syntax highlighting, and a sleek user interface.
 
 ![Grapper Icon](icon.png)
 
