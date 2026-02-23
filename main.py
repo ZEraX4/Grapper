@@ -435,7 +435,7 @@ class MainWindow(QMainWindow):
         btn_regex_help.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         btn_regex_help.setFixedSize(20, 20)
         btn_regex_help.setFlat(True)
-        btn_regex_help.setToolTip("Regex Cheat Sheet")
+        btn_regex_help.setToolTip("Regex Designer")
         btn_regex_help.clicked.connect(self.show_regex_help)
         match_params_layout.addWidget(btn_regex_help)
         match_section.addLayout(match_params_layout)
@@ -614,6 +614,12 @@ class MainWindow(QMainWindow):
         self.btn_open_external.clicked.connect(self.open_in_external_editor)
         self.btn_open_external.setEnabled(False)
         viewer_controls_layout.addWidget(self.btn_open_external)
+
+        self.btn_open_system = QPushButton("Open with System")
+        self.btn_open_system.setObjectName("btn_open_system")
+        self.btn_open_system.clicked.connect(self.open_with_system)
+        self.btn_open_system.setEnabled(False)
+        viewer_controls_layout.addWidget(self.btn_open_system)
         
         file_viewer_layout.addLayout(viewer_controls_layout)
 
@@ -759,24 +765,45 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.file_viewer_widget)
         self.btn_open_external.setEnabled(True)
         self.btn_reveal_explorer.setEnabled(True)
+        self.btn_open_system.setEnabled(True)
 
         try:
-            content = ""
-            if filepath.lower().endswith('.docx'):
-                lines = self.search_engine._extract_text_from_docx(filepath)
-                content = "\n".join(lines)
-            elif filepath.lower().endswith('.xlsx'):
-                lines = self.search_engine._extract_text_from_xlsx(filepath)
-                content = "\n".join(lines)
-            elif filepath.lower().endswith('.pdf'):
-                lines = self.search_engine._extract_text_from_pdf(filepath)
-                content = "\n".join(lines)
-            else:
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
+            # Check if file is likely binary
+            binary_extensions = {'.exe', '.dll', '.so', '.bin', '.jpg', '.png', '.gif', '.mp4', '.zip', '.7z', '.rar'}
+            _, ext = os.path.splitext(filepath.lower())
             
-            self.text_editor.setPlainText(content)
-            self.highlighter.set_file(filepath)
+            is_binary = ext in binary_extensions
+            content = ""
+            
+            if not is_binary:
+                try:
+                    if filepath.lower().endswith('.docx'):
+                        lines = self.search_engine._extract_text_from_docx(filepath)
+                        content = "\n".join(lines)
+                    elif filepath.lower().endswith('.xlsx'):
+                        lines = self.search_engine._extract_text_from_xlsx(filepath)
+                        content = "\n".join(lines)
+                    elif filepath.lower().endswith('.pdf'):
+                        lines = self.search_engine._extract_text_from_pdf(filepath)
+                        content = "\n".join(lines)
+                    else:
+                        with open(filepath, 'r', encoding='utf-8', errors='strict') as f:
+                            # Read first 1024 bytes to check for nulls (rudimentary binary check)
+                            chunk = f.read(1024)
+                            if '\0' in chunk:
+                                is_binary = True
+                            else:
+                                f.seek(0)
+                                content = f.read()
+                except (UnicodeDecodeError, PermissionError):
+                    is_binary = True
+
+            if is_binary:
+                self.text_editor.setPlainText(f"--- Non-Text File ---\n\nPath: {filepath}\n\nThis file appears to be a binary or non-UTF-8 file. Use 'Open with System' to view it in its default application.")
+                self.highlighter.set_file("") # Clear highlighting
+            else:
+                self.text_editor.setPlainText(content)
+                self.highlighter.set_file(filepath)
             
             # Highlight Matches - simple selection highlight
             # Note: This just highlights matches in file. Actual fuzzy matches might vary.
@@ -911,6 +938,21 @@ class MainWindow(QMainWindow):
             subprocess.Popen(args)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not open editor: {e}")
+
+    def open_with_system(self):
+        filepath = self.lbl_filepath.text()
+        if not filepath or not os.path.exists(filepath):
+            return
+        
+        try:
+            if sys.platform == 'win32':
+                os.startfile(filepath)
+            elif sys.platform == 'darwin': # macOS
+                subprocess.run(['open', filepath])
+            else: # Linux
+                subprocess.run(['xdg-open', filepath])
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not open file with system: {e}")
 
     def reveal_in_explorer(self):
         filepath = self.lbl_filepath.text()
@@ -1094,6 +1136,17 @@ class MainWindow(QMainWindow):
             QPushButton#btn_open_external:pressed {
                 background-color: #00695c;
             }
+            QPushButton#btn_open_system {
+                background-color: #6a1b9a;
+                border: 1px solid #4a148c;
+                color: white;
+            }
+            QPushButton#btn_open_system:hover {
+                background-color: #7b1fa2;
+            }
+            QPushButton#btn_open_system:pressed {
+                background-color: #4a148c;
+            }
             QListWidget {
                 border: 1px solid #555;
                 border-radius: 4px;
@@ -1193,6 +1246,17 @@ class MainWindow(QMainWindow):
             }
             QPushButton#btn_open_external:pressed {
                 background-color: #00695c;
+            }
+            QPushButton#btn_open_system {
+                background-color: #6a1b9a;
+                color: white;
+                border: 1px solid #4a148c;
+            }
+            QPushButton#btn_open_system:hover {
+                background-color: #7b1fa2;
+            }
+            QPushButton#btn_open_system:pressed {
+                background-color: #4a148c;
             }
             QListWidget {
                 border: 1px solid #ccc;
